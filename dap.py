@@ -1104,6 +1104,7 @@ class DAPRegr(DAP):
 
             self.EVS: np.empty(metrics_shape),
             self.MAE: np.empty(metrics_shape),
+            self.MSE: np.empty(metrics_shape),
             self.MedAE: np.empty(metrics_shape),
             self.R2: np.empty(metrics_shape),
             self.PREDS: np.empty(metrics_shape + (self.experiment_data.nb_samples,), dtype=np.int),
