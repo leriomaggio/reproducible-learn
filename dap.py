@@ -21,7 +21,7 @@ from sklearn.metrics import (explained_variance_score, mean_absolute_error,
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize
 
-from . import settings
+import settings
 from .metrics import (npv, ppv, sensitivity, specificity,
                       KCCC_discrete, dor, accuracy)
 
