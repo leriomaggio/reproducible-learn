@@ -886,8 +886,8 @@ class DAP(ABC):
 
         # update contextual information
         self._nb_features = best_nb_features  # set this attr. to possibly reference the model
-        self._iteration_step_nb = self.cv_n + 1  # last step
-        self._feature_step_nb = self.cv_n + 1  # flag value indicating last step
+        self._iteration_step_nb = (self.cv_n * self.cv_k)  # last step
+        self._feature_step_nb = (self.cv_n * self.cv_k)  # flag value indicating last step
 
         # Set Training data
         if self.is_stratified:
