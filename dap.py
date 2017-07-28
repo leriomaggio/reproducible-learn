@@ -1196,8 +1196,8 @@ class DAPRegr(DAP):
         self.metrics[self.TEST_SET][self.PREDS] = predicted_values
         self.metrics[self.TEST_SET][self.EVS] = explained_variance_score(y_true_test, predicted_values)
         self.metrics[self.TEST_SET][self.MAE] = mean_absolute_error(y_true_test, predicted_values)
-        self.metrics[self.TEST_SET][self.MSE] = median_absolute_error(y_true_test, predicted_values)
-        self.metrics[self.TEST_SET][self.MedAE] = mean_squared_error(y_true_test, predicted_values)
+        self.metrics[self.TEST_SET][self.MSE] = mean_squared_error(y_true_test, predicted_values)
+        self.metrics[self.TEST_SET][self.MedAE] = median_absolute_error(y_true_test, predicted_values)
         self.metrics[self.TEST_SET][self.R2] = r2_score(y_true_test, predicted_values)
 
         if extra_metrics:
