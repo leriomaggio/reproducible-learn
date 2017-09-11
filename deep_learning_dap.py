@@ -8,7 +8,7 @@ from keras.models import model_from_json
 
 
 from .dap import DAP, DAPRegr
-import deep_learning_settings
+from . import  deep_learning_settings
 
 
 class DeepLearningDAP(DAP):

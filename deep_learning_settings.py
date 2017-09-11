@@ -19,7 +19,7 @@ epochs = 200
 batch_size = 32
 
 # Verbosity level of `fit` method
-fit_verbose = 1
+fit_verbose = 0
 
 # Shuffle (boolean)
 # -----------------
