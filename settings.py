@@ -56,7 +56,6 @@ feature_ranker = kbest_ranking
 # of features to consider when generating feature steps
 
 # Default: 5%, 25%, 50%, 75%, 100% (all)
-# feature_ranges = [5, 25, 50, 75, 100]
 feature_ranges = [25, 50, 75, 100]
 
 # Include top feature in the feature steps
