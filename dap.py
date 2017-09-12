@@ -776,7 +776,15 @@ class DAP(ABC):
 
         """
         if self.to_categorical:
-            y = label_binarize(y, classes=np.arange(self.experiment_data.nb_classes))
+            if self.experiment_data.nb_classes == 2:  # binary problem
+                # Trick to calculate one-hot-encoding using sklearn function
+                # This is because in the new version of Scikit-learn, the label_binarize
+                # function returns an output shape of [n_samples, 1] for Binary problems 
+                y = label_binarize(y, classes=np.arange(self.experiment_data.nb_classes + 1))
+                # output shape of y will be [n_samples, 3], so we drop one dimension of all zeros
+                y = y.reshape(y.shape[:2])
+            else:
+                y = label_binarize(y, classes=np.arange(self.experiment_data.nb_classes))
             y = y.astype(np.float32)  # Keras default - consider moving this to Deep Learning DAP
         return y
 
