@@ -6,7 +6,6 @@ from keras import backend as K
 from keras.callbacks import ModelCheckpoint
 from keras.models import model_from_json
 
-
 from .dap import DAP, DAPRegr
 from . import  deep_learning_settings
 
