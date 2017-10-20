@@ -102,6 +102,9 @@ class DAP(ABC):
         # Set Training Dataset
         self._set_training_data()
 
+        # Set Test Dataset
+        self._set_test_data()
+
         if self.random_labels:
             np.random.shuffle(self.y)
 
@@ -1059,7 +1062,6 @@ class DAP(ABC):
             The best model trained by the run() method
         """
 
-        self._set_test_data()
         X_test = self.X_test
         Y_test = self.y_test
 
