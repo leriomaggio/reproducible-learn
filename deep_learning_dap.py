@@ -7,7 +7,7 @@ from keras.callbacks import ModelCheckpoint
 from keras.models import model_from_json
 
 from .dap import DAP, DAPRegr
-from . import  deep_learning_settings
+from . import deep_learning_settings
 
 
 class DeepLearningDAP(DAP):
@@ -59,6 +59,11 @@ class DeepLearningDAP(DAP):
         self.loss_weights = deep_learning_settings.loss_weights
         self.extra_compile_params = deep_learning_settings.extra_compilation_parameters
 
+        # Force the `to_categorical` setting to True for Deep Learning DAP
+        # (this is True in the 99% of the cases and avoids to bother in case one forgets
+        #  to check and set the corresponding setting)
+        self.to_categorical = True
+
         # Model Cache - one model reference per feature step
         self._model_cache = {}
         self._do_serialisation = True  # Checks whether model serialisation works
@@ -72,7 +77,7 @@ class DeepLearningDAP(DAP):
         namely with a brand new set of weights each time this property is called.
         """
         # if not self.ml_model_:
-        #     self.ml_model_ = self._create_ml_model()
+        #     self.ml_model_ = self.create_ml_model()
         # else:
         #     pass  # Random Shuffling of Weights
 
@@ -88,11 +93,11 @@ class DeepLearningDAP(DAP):
                 except Exception:
                     self._do_serialisation = False
                     self._model_cache = dict()  #reset cache
-                    model = self._create_ml_model()
+                    model = self.create_ml_model()
             else:
-                model = self._create_ml_model()
+                model = self.create_ml_model()
         else:
-            model = self._create_ml_model()
+            model = self.create_ml_model()
             if self._do_serialisation:
                 try:
                     self._model_cache[cache_key] = model.to_json()
@@ -103,7 +108,7 @@ class DeepLearningDAP(DAP):
         self.ml_model_ = model
         return self.ml_model_
 
-    def _extra_operations_end_experiment(self):
+    def clear_network_graph(self):
         """
         Method that resets the Keras session at the end of each experiment.
         We need this in order to reduce the memory leak from tensorflow.
@@ -118,7 +123,7 @@ class DeepLearningDAP(DAP):
         if not isinstance(self.optimizer, str):
             self.optimizer = self.optimizer_class(**self.optimizer_configuration)
 
-    def _create_ml_model(self):
+    def create_ml_model(self):
         """Instantiate a new Keras Deep Network to be used in the fit-predict step.
 
         Returns
@@ -378,7 +383,7 @@ class DeepLearningDAP(DAP):
             self.extra_fit_params.pop('validation_data', None)
 
         model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_nb, self._nb_features)
-        base_output_folder = self._get_output_folder()
+        base_output_folder = self.results_folder()
         model_filename = os.path.join(base_output_folder, model_filename)
         callbacks = [ModelCheckpoint(filepath=model_filename, save_best_only=True, save_weights_only=True), ]
         if self.fit_callbacks:

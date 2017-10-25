@@ -17,13 +17,17 @@ import pandas as pd
 
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import (explained_variance_score, mean_absolute_error,
-                             mean_squared_error, median_absolute_error, r2_score )
+                             mean_squared_error, median_absolute_error, r2_score)
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize
 
 from . import settings
 from .metrics import (npv, ppv, sensitivity, specificity,
                       KCCC_discrete, dor, accuracy)
+
+# Import for Parallel Execution of DAP
+from sklearn.externals.joblib import Parallel, delayed
+from sklearn.model_selection._validation import _fit_and_score
 
 
 class DAP(ABC):
@@ -84,11 +88,14 @@ class DAP(ABC):
         # Map DAP configurations from settings to class attributes
         self.cv_k = settings.Cv_K
         self.cv_n = settings.Cv_N
+
         self.feature_ranker = settings.feature_ranker
         self.feature_scaler = settings.feature_scaler
+
         self.random_labels = settings.use_random_labels
         self.is_stratified = settings.stratified
         self.to_categorical = settings.to_categorical
+
         self.apply_feature_scaling = settings.apply_feature_scaling
 
         self.iteration_steps = self.cv_k * self.cv_n
@@ -131,19 +138,56 @@ class DAP(ABC):
         self._feature_step_nb = -1
         self._runstep_nb = -1
         self._fold_nb = -1
+
         # Store the number of features in each iteration/feature step.
-        self._nb_features = -1
         # Note: This attribute is not really used in this general DAP process,
         # although this is paramount for its DeepLearning extension.
         # In fact it is mandatory to know
         # the total number of features to be used so to properly
         # set the shape of the first InputLayer(s).
+        self._nb_features = -1
+
+    # ====== Abstract Interface ======
+    #
+
+    @abstractmethod
+    def create_ml_model(self):
+        """Instantiate a new Machine Learning model to be used in the fit-predict step.
+        Most likely this function has to simply call the constructor of the
+        `sklearn.Estimator` object to be used.
+
+        Examples:
+        ---------
+
+        from sklearn.svm import SVC
+        return SVC(kernel='rbf', C=0.01)
+        """
+
+    @property
+    @abstractmethod
+    def results_folder(self):
+        """Return the path to the folder where results will be stored.
+        This method is abstract as its implementation is very experiment-dependent!
+
+        Returns
+        -------
+        str : Path to the output folder
+        """
+
+    @property
+    @abstractmethod
+    def ml_model_name(self):
+        """Abstract property for machine learning model associated to DAP instance.
+        Each subclass should implement this property, if needed."""
+
+    # ====== Public Interface ======
+    #
 
     @property
     def ml_model(self):
         """Machine Learning Model to be used in DAP."""
         if not self.ml_model_:
-            self.ml_model_ = self._create_ml_model()
+            self.ml_model_ = self.create_ml_model()
         return self.ml_model_
 
     @property
@@ -153,6 +197,233 @@ class DAP(ABC):
     @property
     def feature_ranking_name(self):
         return self._get_label(self.feature_ranker)
+
+    def experiment_setup(self):
+        """Hook method to be implemented in case extra operations are needed before the
+        experiment is started.
+
+        Note: in future versions of the DAP, the default implementation of this method
+        will establish a connection to the database.
+        """
+        pass
+
+    def experiment_teardown(self):
+        """Hook method to be implemented in case extra operations must be performed
+         at the end of the experiment.
+
+         Note: in future versions of the DAP, the default implementation of this method
+         will close a connection to the database.
+         """
+        pass
+
+    def iteration_setup(self):
+        """Hook method to be implemented in case extra operations are needed before
+        each iteration of the cross-validation is run."""
+        pass
+
+    def iteration_teardown(self):
+        """
+        Hook method to be implemented in case extra operations are needed at the end of
+        each iteration of the corss-validation."""
+        pass
+
+    def fold_setup(self):
+        """Hook method to be implemented in case extra operations are needed before
+        each fold is entered."""
+        pass
+
+    def fold_teardown(self):
+        """Hook method to be implemented in case extra operations are needed after each
+        fold has been processed."""
+        pass
+
+    def feature_step_setup(self):
+        """Hook method to be implemented in case extra operations are needed before
+        each feature step is being processed."""
+        pass
+
+    def feature_step_teardown(self):
+        """Hook method to be implemented in case extra operations are needed after
+        each feature step has been processed."""
+        pass
+
+    def run(self, verbose=False):
+        """
+        Implement the entire Data Analysis Plan Main loop.
+
+        Parameters
+        ----------
+        verbose: bool
+            Flag specifying verbosity level (default: False, i.e. no output produced)
+
+        Returns
+        -------
+        dap_model
+            The estimator object fit on the whole training set (i.e. (self.X, self.y) )
+            Note: The type or returned `dap_model` may change depending on
+            different DAP subclasses (e.g. A `keras.models.Model` is returned by the
+            `DeepLearningDap` subclass).
+
+        """
+        base_output_folder = self.results_folder()
+
+        # Set the different feature-steps to be used during the CV
+        k_features_indices = self._generate_feature_steps(self.experiment_data.nb_features)
+
+        # Setup Experiment
+        self.experiment_setup()
+
+        for runstep in range(self.cv_n):
+
+            # Save contextual information
+            self._runstep_nb = runstep
+
+            # Setup Iteration
+            self.iteration_setup()
+
+            # 1. Generate K-Folds
+            if self.is_stratified:
+                kfold_indices = mlpy_cv_kfold(n=self.experiment_data.nb_samples,
+                                              k=self.cv_k, strat=self.y, seed=runstep)
+            else:
+                kfold_indices = mlpy_cv_kfold(n=self.experiment_data.nb_samples,
+                                              k=self.cv_k, seed=runstep)
+
+            if verbose:
+                print('=' * 80)
+                print('{} over {} experiments'.format(runstep + 1, self.cv_n))
+                print('=' * 80)
+
+            for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
+                # Save contextual information
+                self._iteration_step_nb = runstep * self.cv_k + fold
+                self._fold_nb = fold
+                self._fold_training_indices = training_indices
+                self._fold_validation_indices = validation_indices
+
+                # Setup fold
+                self.fold_setup()
+
+                if verbose:
+                    print('=' * 80)
+                    print('Experiment: {} - Fold {} over {} folds'.format(runstep + 1, fold + 1, self.cv_k))
+
+                # 2. Split data in Training and Validation sets
+                (X_train, X_validation), (y_train, y_validation) = self._train_validation_split(training_indices,
+                                                                                                validation_indices)
+
+                # 2.1 Apply Feature Scaling (if needed)
+                if self.apply_feature_scaling:
+                    if verbose:
+                        print('-- centering and normalization using: {}'.format(self.feature_scaling_name))
+                    X_train, X_validation = self._apply_scaling(X_train, X_validation)
+
+                # 3. Apply Feature Ranking
+                if verbose:
+                    print('-- ranking the features using: {}'.format(self.feature_ranking_name))
+                    print('=' * 80)
+                ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
+                self.metrics[self.RANKINGS][self._iteration_step_nb] = ranking  # store ranking
+
+                # 4. Iterate over Feature Steps
+                for step, nb_features in enumerate(k_features_indices):
+
+                    # Setup feature Step
+                    self.feature_step_setup()
+
+                    # 4.1 Select Ranked Features
+                    X_train_fs, X_val_fs = self._select_ranked_features(ranking[:nb_features], X_train, X_validation)
+
+                    # Store contextual info about current number of features used in this iteration and
+                    # corresponding feature step.
+
+                    # Note: The former will be effectively used in the `DeepLearningDAP` subclass to
+                    # properly instantiate the Keras `InputLayer`.
+                    self._nb_features = nb_features
+                    self._feature_step_nb = step
+
+                    # 5. Fit and Predict\
+                    model = self.ml_model
+                    # 5.1 Train the model and generate predictions (inference)
+                    predictions, extra_metrics = self._fit_predict(model, X_train_fs, y_train, X_val_fs, y_validation)
+                    self._compute_step_metrics(validation_indices, y_validation, predictions, **extra_metrics)
+
+                    if verbose:
+                        print(self._print_ref_step_metric())
+
+                    # Teardown Feature Step
+                    self.feature_step_teardown()
+
+                # Teardown Fold
+                self.fold_teardown()
+
+            # Teardown Iteration
+            self.iteration_teardown()
+
+        # Compute Confidence Intervals for all target metrics
+        self._compute_metrics_confidence_intervals(k_features_indices)
+        # Save All Metrics to File
+        self._save_all_metrics_to_file(base_output_folder, k_features_indices,
+                                       self.experiment_data.feature_names, self.experiment_data.sample_names)
+
+        if verbose:
+            print('=' * 80)
+            print('Fitting and predict best model')
+            print('=' * 80)
+
+        dap_model, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
+        if extra_metrics:
+            self._compute_extra_step_metrics(extra_metrics)
+
+        # Tear down Experiment
+        self.experiment_teardown()
+
+        # Finally return the trained model
+        return dap_model
+
+    def predict_on_test(self, best_model):
+        """
+        Execute the last step of the DAP. A prediction using the best model
+        trained in the main loop and the best number of features.
+
+        Parameters
+        ----------
+        best_model
+            The best model trained by the run() method
+        """
+
+        X_test = self.X_test
+        Y_test = self.y_test
+
+        if self.apply_feature_scaling:
+            _, X_test = self._apply_scaling(self.X, self.X_test)
+
+        # Select the correct features and prepare the data before predict
+        feature_ranking = self._best_feature_ranking[:self._nb_features]
+        X_test = self._select_ranked_features(feature_ranking, X_test)
+        X_test = self._prepare_data(X_test)
+        Y = self._prepare_targets(Y_test)
+
+        predictions = self._predict(best_model, X_test)
+        self._compute_test_metrics(Y_test, predictions)
+        self._save_test_metrics_to_file(self.results_folder())
+
+    def save_configuration(self):
+        """
+        Method that saves the configuration of the dap as a pickle. If more configuration
+        need to be saved this can be done reimplementing the _save_extra_configuration method
+        """
+
+        settings_directives = dir(settings)
+        settings_conf = {key: getattr(settings, key) for key in settings_directives if not key.startswith('__')}
+        dump_filepath = os.path.join(self.results_folder(), 'dap_settings.pickle')
+        with open(dump_filepath, "wb") as dump_file:
+            pickle.dumps(settings_conf)
+            pickle.dump(obj=settings_conf, file=dump_file, protocol=pickle.HIGHEST_PROTOCOL)
+        self._save_extra_configuration()
+
+    # ====== Utility Methods (a.k.a. Private Interface) =======
+    #
 
     def _get_label(self, attribute):
         """Generate a (lowercase) label referring to the provided
@@ -170,39 +441,6 @@ class DAP(ABC):
             name = attribute.__class__.__name__
         return name.lower()
 
-    # ====== Abstract Methods ======
-    #
-    @abstractmethod
-    def _create_ml_model(self):
-        """Instantiate a new Machine Learning model to be used in the fit-predict step.
-        Most likely this function has to simply call the constructor of the 
-        `sklearn.Estimator` object to be used.
-        
-        Examples:
-        ---------
-        
-        from sklearn.svm import SVC
-        return SVC(kernel='rbf', C=0.01)
-        """
-
-    @abstractmethod
-    def _get_output_folder(self):
-        """Return the path to the output folder. 
-        This method is abstract as its implementation is very experiment-dependent!
-        
-        Returns
-        -------
-        str : Path to the output folder
-        """
-
-    @property
-    @abstractmethod
-    def ml_model_name(self):
-        """Abstract property for machine learning model associated to DAP instance.
-        Each subclass should implement this property, if needed."""
-
-    # ====== Utility Methods =======
-    #
     def _set_training_data(self):
         """Default implementation for classic and quite standard DAP implementation.
          More complex implementation require overriding this method.
@@ -522,34 +760,6 @@ class DAP(ABC):
             k_features_indices.append(k)
 
         return k_features_indices
-
-    def _extra_operations_begin_fold(self):
-        """
-        Method to be implemented in case that extra operations are needed at the beginning
-        of every fold. by default, no extra operations are needed
-        """
-        pass
-
-    def _extra_operations_end_experiment(self):
-        """
-        Method to be implemented in case that extra operations are needed at the end of
-        every experiment. by default, no extra operations are needed
-        """
-        pass
-
-    def save_configuration(self):
-        """
-        Method that saves the configuration of the dap as a pickle. If more configuration
-        need to be saved this can be done reimplementing the _save_extra_configuration method
-        """
-
-        settings_directives = dir(settings)
-        settings_conf = {key: getattr(settings, key) for key in settings_directives if not key.startswith('__')}
-        dump_filepath = os.path.join(self._get_output_folder(), 'dap_settings.pickle')
-        with open(dump_filepath, "wb") as dump_file:
-            pickle.dumps(settings_conf)
-            pickle.dump(obj=settings_conf, file=dump_file, protocol=pickle.HIGHEST_PROTOCOL)
-        self._save_extra_configuration()
 
     def _save_extra_configuration(self):
         """
@@ -938,145 +1148,7 @@ class DAP(ABC):
 
     # ===========================================================
 
-    def run(self, verbose=False):
-        """
-        Implement the entire Data Analysis Plan Main loop.
-        
-        Parameters
-        ----------
-        verbose: bool
-            Flag specifying verbosity level (default: False, i.e. no output produced)
 
-        Returns
-        -------
-        dap_model
-            The estimator object fit on the whole training set (i.e. (self.X, self.y) )
-            Note: The type or returned `dap_model` may change depending on
-            different DAP subclasses (e.g. A `keras.models.Model` is returned by the 
-            `DeepLearningDap` subclass).
-            
-        """
-        base_output_folder = self._get_output_folder()
-
-        # Set the different feature-steps to be used during the CV
-        k_features_indices = self._generate_feature_steps(self.experiment_data.nb_features)
-
-        for runstep in range(self.cv_n):
-
-            # Save contextual information
-            self._runstep_nb = runstep
-
-            # 1. Generate K-Folds
-            if self.is_stratified:
-                kfold_indices = mlpy_cv_kfold(n=self.experiment_data.nb_samples,
-                                              k=self.cv_k, strat=self.y, seed=runstep)
-            else:
-                kfold_indices = mlpy_cv_kfold(n=self.experiment_data.nb_samples,
-                                              k=self.cv_k, seed=runstep)
-
-            if verbose:
-                print('=' * 80)
-                print('{} over {} experiments'.format(runstep + 1, self.cv_n))
-                print('=' * 80)
-
-            for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
-                # Save contextual information
-                self._iteration_step_nb = runstep * self.cv_k + fold
-                self._fold_nb = fold
-                self._fold_training_indices = training_indices
-                self._fold_validation_indices = validation_indices
-
-                self._extra_operations_begin_fold()
-
-                if verbose:
-                    print('=' * 80)
-                    print('Experiment: {} - Fold {} over {} folds'.format(runstep + 1, fold + 1, self.cv_k))
-
-                # 2. Split data in Training and Validation sets
-                (X_train, X_validation), (y_train, y_validation) = self._train_validation_split(training_indices,
-                                                                                                validation_indices)
-
-                # 2.1 Apply Feature Scaling (if needed)
-                if self.apply_feature_scaling:
-                    if verbose:
-                        print('-- centering and normalization using: {}'.format(self.feature_scaling_name))
-                    X_train, X_validation = self._apply_scaling(X_train, X_validation)
-
-                # 3. Apply Feature Ranking
-                if verbose:
-                    print('-- ranking the features using: {}'.format(self.feature_ranking_name))
-                    print('=' * 80)
-                ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
-                self.metrics[self.RANKINGS][self._iteration_step_nb] = ranking  # store ranking
-
-                # 4. Iterate over Feature Steps
-                for step, nb_features in enumerate(k_features_indices):
-                    # 4.1 Select Ranked Features
-                    X_train_fs, X_val_fs = self._select_ranked_features(ranking[:nb_features], X_train, X_validation)
-
-                    # Store contextual info about current number of features used in this iteration and
-                    # corresponding feature step.
-
-                    # Note: The former will be effectively used in the `DeepLearningDAP` subclass to
-                    # properly instantiate the Keras `InputLayer`.
-                    self._nb_features = nb_features
-                    self._feature_step_nb = step
-
-                    # 5. Fit and Predict\
-                    model = self.ml_model
-                    # 5.1 Train the model and generate predictions (inference)
-                    predictions, extra_metrics = self._fit_predict(model, X_train_fs, y_train, X_val_fs, y_validation)
-                    self._compute_step_metrics(validation_indices, y_validation, predictions, **extra_metrics)
-
-                    if verbose:
-                        print(self._print_ref_step_metric())
-
-            self._extra_operations_end_experiment()
-
-        # Compute Confidence Intervals for all target metrics
-        self._compute_metrics_confidence_intervals(k_features_indices)
-        # Save All Metrics to File
-        self._save_all_metrics_to_file(base_output_folder, k_features_indices,
-                                       self.experiment_data.feature_names, self.experiment_data.sample_names)
-
-        if verbose:
-            print('=' * 80)
-            print('Fitting and predict best model')
-            print('=' * 80)
-
-        dap_model, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
-        if extra_metrics:
-            self._compute_extra_step_metrics(extra_metrics)
-
-        # Finally return the trained model
-        return dap_model
-
-    def predict_on_test(self, best_model):
-        """
-        Execute the last step of the DAP. A prediction using the best model
-        trained in the main loop and the best number of features.
-                
-        Parameters
-        ----------
-        best_model 
-            The best model trained by the run() method
-        """
-
-        X_test = self.X_test
-        Y_test = self.y_test
-
-        if self.apply_feature_scaling:
-            _, X_test = self._apply_scaling(self.X, self.X_test)
-
-        # Select the correct features and prepare the data before predict
-        feature_ranking = self._best_feature_ranking[:self._nb_features]
-        X_test = self._select_ranked_features(feature_ranking, X_test)
-        X_test = self._prepare_data(X_test)
-        Y = self._prepare_targets(Y_test)
-
-        predictions = self._predict(best_model, X_test)
-        self._compute_test_metrics(Y_test, predictions)
-        self._save_test_metrics_to_file(self._get_output_folder())
 
 
 class DAPRegr(DAP):
