@@ -108,6 +108,10 @@ class DeepLearningDAP(DAP):
         self.ml_model_ = model
         return self.ml_model_
 
+    @property
+    def optimizer_name(self):
+        return self._get_label(self.optimizer_class)
+
     def clear_network_graph(self):
         """
         Method that resets the Keras session at the end of each experiment.
