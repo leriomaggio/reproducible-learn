@@ -265,7 +265,7 @@ class DAP(ABC):
             `DeepLearningDap` subclass).
 
         """
-        base_output_folder = self.results_folder()
+        base_output_folder = self.results_folder
 
         # Set the different feature-steps to be used during the CV
         k_features_indices = self._generate_feature_steps(self.experiment_data.nb_features)
@@ -406,7 +406,7 @@ class DAP(ABC):
 
         predictions = self._predict(best_model, X_test)
         self._compute_test_metrics(Y_test, predictions)
-        self._save_test_metrics_to_file(self.results_folder())
+        self._save_test_metrics_to_file(self.results_folder)
 
     def save_configuration(self):
         """
@@ -416,7 +416,7 @@ class DAP(ABC):
 
         settings_directives = dir(settings)
         settings_conf = {key: getattr(settings, key) for key in settings_directives if not key.startswith('__')}
-        dump_filepath = os.path.join(self.results_folder(), 'dap_settings.pickle')
+        dump_filepath = os.path.join(self.results_folder, 'dap_settings.pickle')
         with open(dump_filepath, "wb") as dump_file:
             pickle.dumps(settings_conf)
             pickle.dump(obj=settings_conf, file=dump_file, protocol=pickle.HIGHEST_PROTOCOL)

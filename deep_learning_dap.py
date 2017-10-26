@@ -383,7 +383,7 @@ class DeepLearningDAP(DAP):
             self.extra_fit_params.pop('validation_data', None)
 
         model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_nb, self._nb_features)
-        base_output_folder = self.results_folder()
+        base_output_folder = self.results_folder
         model_filename = os.path.join(base_output_folder, model_filename)
         callbacks = [ModelCheckpoint(filepath=model_filename, save_best_only=True, save_weights_only=True), ]
         if self.fit_callbacks:
