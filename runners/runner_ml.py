@@ -28,7 +28,7 @@ class RandomForestRunnerDAP(DAP, BaseRunner):
     """Specialisation of the DAP for RandomForest Classifier"""
 
     def __init__(self, experiment):
-        RandomForestRunnerDAP.__init__(self, experiment=experiment)
+        DAP.__init__(self, experiment=experiment)
         # Initialise Hyper parameters with RandomForestClassifier's default ones
         BaseRunner.__init__(self, **RandomForestClassifier().get_params())
 
@@ -47,7 +47,7 @@ class RandomForestRegressorRunnerDAP(DAPRegr, BaseRunner):
     """DAP Specialisation for Random Forest Regressor"""
 
     def __init__(self, experiment):
-        RandomForestRegressorRunnerDAP.__init__(self, experiment=experiment)
+        DAP.__init__(self, experiment=experiment)
         # Initialise Hyper parameters with RandomForestRegressor's default ones
         BaseRunner.__init__(self, **RandomForestRegressor().get_params())
 
@@ -71,7 +71,7 @@ class SupportVectorRunnerDAP(DAP, BaseRunner):
     """Specialisation of the DAP for Support Vector Classifier"""
 
     def __init__(self, experiment):
-        SupportVectorRunnerDAP.__init__(self, experiment=experiment)
+        DAP.__init__(self, experiment=experiment)
         # Initialise Hyper parameters with SupportVectorClassifier's default ones
         BaseRunner.__init__(self, **SVC().get_params())
 
@@ -91,7 +91,7 @@ class SupportVectorRegressorRunnerDAP(DAPRegr, BaseRunner):
     """DAP Specialisation for Support Vector Regressor"""
 
     def __init__(self, experiment):
-        SupportVectorRegressorRunnerDAP.__init__(self, experiment=experiment)
+        DAP.__init__(self, experiment=experiment)
         # Initialise Hyper parameters with SupportVectorClassifier's default ones
         BaseRunner.__init__(self, **SVR().get_params())
 
