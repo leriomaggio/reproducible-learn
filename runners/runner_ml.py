@@ -1,20 +1,17 @@
 """Implements some pre-defined base runners to be used in DAP with sklearn models."""
 
 from dap import DAP, DAPRegr
+from sklearn.datasets.base import Bunch
 
 
 class BaseRunner:
 
     def __init__(self, **hyper_params):
-        self._hyper_params = hyper_params
+        self._hyper_params = Bunch(**hyper_params)
 
     @property
     def hyper_params(self):
         return self._hyper_params
-
-    @hyper_params.setter
-    def hyper_params(self, **params):
-        self._hyper_params = params
 
 
 # =========================================================================
