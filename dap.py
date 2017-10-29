@@ -1138,10 +1138,10 @@ class DAP(ABC):
         model = self.ml_model
 
         # 4.1 Prepare data
-        Xs_train_fs = self._prepare_data(Xs_train_fs)
-        Xs_val_fs = self._prepare_data(Xs_val_fs)
-        y_train = self._prepare_targets(y_train)
-        y_val = self._prepare_targets(y_val)
+        Xs_train_fs = self._prepare_data(Xs_train_fs, training_data=True)
+        Xs_val_fs = self._prepare_data(Xs_val_fs, training_data=False)
+        y_train = self._prepare_targets(y_train, training_labels=True)
+        y_val = self._prepare_targets(y_val, training_labels=False)
 
         model, extra_metrics = self._fit(model, Xs_train_fs, y_train, Xs_val_fs, y_val)
         return model, extra_metrics
