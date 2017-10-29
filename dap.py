@@ -183,6 +183,9 @@ class DAP(ABC):
     # ====== Public Interface ======
     #
 
+    def pick_best_metric(self, values):
+        return np.argmax(values)
+
     @property
     def ml_model(self):
         """Machine Learning Model to be used in DAP."""
@@ -1119,7 +1122,7 @@ class DAP(ABC):
 
         # Get Best Feature Step (i.e. no. of features to use)
         reference_metric_avg_values = self.metrics[self.DAP_REFERENCE_METRIC][:, 0]
-        max_index = np.argmax(reference_metric_avg_values)
+        max_index = self.pick_best_metric(reference_metric_avg_values)
         best_nb_features = k_feature_indices[max_index]
 
         # update contextual information
@@ -1166,8 +1169,6 @@ class DAP(ABC):
     # ===========================================================
 
 
-
-
 class DAPRegr(DAP):
     """Specialisation of the DAP implementation for Regression Tasks"""
 
@@ -1188,6 +1189,10 @@ class DAPRegr(DAP):
 
     BASE_METRICS = [EVS, MAE, MSE, MedAE, R2]
     CI_METRICS = [EVS_CI, MAE_CI, MedAE_CI, MSE_CI, R2_CI]
+
+    def pick_best_metric(self, values):
+        ## we want to minimise error
+        return np.argmin(values)
 
     # ====== Utility Methods (Specialisation) =======
 
