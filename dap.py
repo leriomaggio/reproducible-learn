@@ -401,8 +401,8 @@ class DAP(ABC):
         # Select the correct features and prepare the data before predict
         feature_ranking = self._best_feature_ranking[:self._nb_features]
         X_test = self._select_ranked_features(feature_ranking, X_test)
-        X_test = self._prepare_data(X_test)
-        Y = self._prepare_targets(Y_test)
+        X_test = self._prepare_data(X_test, learning_phase=False)
+        Y_test = self._prepare_targets(Y_test, learning_phase=False)
 
         predictions = self._predict(best_model, X_test)
         self._compute_test_metrics(Y_test, predictions)
@@ -942,7 +942,7 @@ class DAP(ABC):
         predictions = self._predict(model, X_validation)
         return predictions, extra_metrics
 
-    def _prepare_data(self, X, training_data=True):
+    def _prepare_data(self, X, training_data=True, learning_phase=True):
         """
         Preparation of data before training/inference.
         Current implementation (default behaviour) does not apply
@@ -958,6 +958,15 @@ class DAP(ABC):
             This flag is included as it may be required to prepare data
             differently depending they're training or validation data.
 
+        learning_phase: bool (default: True)
+            Flag indicating whether this method is being called during
+            the training phase (i.e. inside the DAP loop) or during
+            the inference phase (i.e. when predicting on test data).
+            Note: If this flag is set to False,
+            the value of `training_data` should be ignored
+            as it only serves to distinguish training and validation data.
+
+
         Returns
         -------
         array-like, shape = (n_samples, n_features)
@@ -965,7 +974,7 @@ class DAP(ABC):
         """
         return X
 
-    def _prepare_targets(self, y, training_labels=True):
+    def _prepare_targets(self, y, training_labels=True, learning_phase=True):
         """
         Preparation of targets before training/inference.
         Current implementation only checks whether categorical one-hot encoding 
@@ -980,6 +989,14 @@ class DAP(ABC):
             Flag indicating whether input targets refers to training data or not.
             This flag is included as it may be required to prepare labels
             differently depending they refers to training or validation data.
+
+        learning_phase: bool (default: True)
+            Flag indicating whether this method is being called during
+            the training phase (i.e. inside the DAP loop) or during
+            the inference phase (i.e. when predicting on test data).
+            Note: If this flag is set to False,
+            the value of `training_labels` should be generally ignored
+            as it only serves to distinguish training and validation labels.
 
         Returns
         -------
