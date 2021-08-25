@@ -5,5 +5,5 @@ numpy>=1.12
 pandas>=0.20.0
 scikit-learn>=0.19
 scipy>=0.19
-tensorflow==1.4.0-rc1
+tensorflow==2.5.1
 theano>=0.9.0
